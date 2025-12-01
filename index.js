@@ -391,6 +391,10 @@ function createTextMapping(rawText, formattedHtml) {
 
     return {
         formattedToRaw: (formattedOffset) => {
+            if (mapping.length === 0) {
+                return formattedOffset;
+            }
+
             let low = 0;
             let high = mapping.length - 1;
 
@@ -405,7 +409,12 @@ function createTextMapping(rawText, formattedHtml) {
                 }
             }
 
-            if (low > 0) low -= 1;
+            if (low >= mapping.length) {
+                low = mapping.length - 1;
+            } else if (low > 0) {
+                low -= 1;
+            }
+
             return mapping[low][0] + (formattedOffset - mapping[low][1]);
         },
     };
