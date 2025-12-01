@@ -195,13 +195,13 @@ async function handleDeleteSelection(mesId, swipeId, range) {
     // Create the new message with the deleted section removed
     let newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
 
-    // Fallback: if nothing changed, try direct substring removal from the raw message
+    // Fallback: if nothing changed, try a loose regex-based match against the raw message
     if (newMessage === fullMessage) {
         const fallbackText = selectedRawText || selectionText || '';
-        const directIndex = fallbackText ? fullMessage.indexOf(fallbackText) : -1;
-        if (directIndex !== -1) {
-            rawStartOffset = directIndex;
-            rawEndOffset = directIndex + fallbackText.length;
+        const looseMatch = findLooseMatchInRaw(fullMessage, fallbackText);
+        if (looseMatch) {
+            rawStartOffset = looseMatch.start;
+            rawEndOffset = looseMatch.end;
             newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
         }
     }
@@ -231,13 +231,13 @@ async function handleRewriteSelection(mesId, swipeId, range, newText) {
     // Create the new message with the rewritten section
     let newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
 
-    // Fallback: if nothing changed, try direct substring replacement in the raw message
+    // Fallback: if nothing changed, try a loose regex-based match against the raw message
     if (newMessage === fullMessage) {
         const fallbackText = selectedRawText || selectionText || '';
-        const directIndex = fallbackText ? fullMessage.indexOf(fallbackText) : -1;
-        if (directIndex !== -1) {
-            rawStartOffset = directIndex;
-            rawEndOffset = directIndex + fallbackText.length;
+        const looseMatch = findLooseMatchInRaw(fullMessage, fallbackText);
+        if (looseMatch) {
+            rawStartOffset = looseMatch.start;
+            rawEndOffset = looseMatch.end;
             newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
         }
     }
@@ -381,10 +381,26 @@ function findClosestMesText(element) {
 
 function findMessageDiv(element) {
     while (element) {
-        if (element.hasAttribute('mesid') && element.hasAttribute('swipeid')) {
+        if (element.hasAttribute('mesid')) {
             return element;
         }
         element = element.parentElement;
+    }
+    return null;
+}
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findLooseMatchInRaw(rawText, selectionText) {
+    if (!selectionText) return null;
+    const pattern = escapeRegex(selectionText.trim()).replace(/\s+/g, '\\s+');
+    if (!pattern) return null;
+    const re = new RegExp(pattern, 'm');
+    const match = rawText.match(re);
+    if (match) {
+        return { start: match.index, end: match.index + match[0].length };
     }
     return null;
 }
@@ -469,8 +485,8 @@ function getSelectedTextInfo(mesId, mesDiv, range) {
     const fullMessage = getContext().chat[mesId].mes;
     const selectionText = range.toString();
 
-    // Get the formatted message
-    const formattedMessage = messageFormatting(fullMessage, undefined, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
+    // Get the formatted message text currently shown in the DOM (fallback to formatter)
+    const formattedMessage = mesDiv ? mesDiv.textContent : messageFormatting(fullMessage, undefined, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
 
     // Create a mapping between raw and formatted text
     const mapping = createTextMapping(fullMessage, formattedMessage);
