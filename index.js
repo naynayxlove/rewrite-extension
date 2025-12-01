@@ -71,10 +71,10 @@ jQuery(async () => {
     eventSource.on(event_types.MESSAGE_EDITED, (editedMesId) => {
         removeUndoButton(editedMesId);
     });
-});
 
-// Initialize the delete menu functionality
-initDeleteMenu();
+    // Initialize the delete menu functionality after settings are loaded
+    initDeleteMenu();
+});
 
 function initDeleteMenu() {
     document.addEventListener('selectionchange', handleSelectionChange);
@@ -243,6 +243,11 @@ function createDeleteMenu() {
     deleteMenu.style.position = 'absolute';
     deleteMenu.style.zIndex = '1000';
     deleteMenu.style.position = 'fixed';
+
+    // Ensure extension settings are initialized
+    if (!extension_settings[extensionName]) {
+        extension_settings[extensionName] = defaultSettings;
+    }
 
     const options = [
         { name: 'Rewrite', show: extension_settings[extensionName].showRewrite },
