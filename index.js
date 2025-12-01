@@ -6,7 +6,7 @@ import {
 } from "../../../../script.js";
 import { extension_settings, getContext } from "../../../extensions.js";
 
-const extensionName = "delete-extension";
+const extensionName = "rewrite-extension-del-only";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const undo_steps = 15;
@@ -22,15 +22,19 @@ let lastSelection = null;
 
 let changeHistory = [];
 
+function ensureSettings() {
+    const existing = extension_settings[extensionName] || {};
+    extension_settings[extensionName] = { ...defaultSettings, ...existing };
+    return extension_settings[extensionName];
+}
+
 // Load settings
 function loadSettings() {
-    extension_settings[extensionName] = extension_settings[extensionName] || {};
+    const settings = ensureSettings();
 
     // Helper function to get a setting with a default value
     const getSetting = (key, defaultValue) => {
-        return extension_settings[extensionName][key] !== undefined
-            ? extension_settings[extensionName][key]
-            : defaultValue;
+        return settings[key] !== undefined ? settings[key] : defaultValue;
     };
 
     // Load settings, using defaults if not set
@@ -40,22 +44,24 @@ function loadSettings() {
 
 function saveSettings() {
     extension_settings[extensionName] = {
+        ...defaultSettings,
         showDelete: $("#show_delete").is(':checked'),
         showRewrite: $("#show_rewrite").is(':checked'),
     };
 
-    // Ensure all settings have a value, using defaults if necessary
-    for (const [key, value] of Object.entries(defaultSettings)) {
-        if (extension_settings[extensionName][key] === undefined) {
-            extension_settings[extensionName][key] = value;
-        }
-    }
+    ensureSettings();
 }
 
 // Initialize
 jQuery(async () => {
-    const settingsHtml = await $.get(`${extensionFolderPath}/delete_settings.html`);
-    $("#extensions_settings2").append(settingsHtml);
+    try {
+        const settingsHtml = await $.get(`${extensionFolderPath}/delete_settings.html`);
+        $("#extensions_settings2").append(settingsHtml);
+    } catch (error) {
+        console.error("[Delete Extension] Failed to load settings UI:", error);
+    }
+
+    ensureSettings();
 
     // Add event listeners
     $("#show_delete, #show_rewrite").on("change", saveSettings);
@@ -82,7 +88,9 @@ function initDeleteMenu() {
     document.addEventListener('touchstart', hideMenuOnOutsideClick);
 
     let chatContainer = document.getElementById('chat');
-    chatContainer.addEventListener('scroll', positionMenu);
+    if (chatContainer) {
+        chatContainer.addEventListener('scroll', positionMenu);
+    }
 }
 
 function handleSelectionChange() {
@@ -244,14 +252,11 @@ function createDeleteMenu() {
     deleteMenu.style.zIndex = '1000';
     deleteMenu.style.position = 'fixed';
 
-    // Ensure extension settings are initialized
-    if (!extension_settings[extensionName]) {
-        extension_settings[extensionName] = defaultSettings;
-    }
+    const settings = ensureSettings();
 
     const options = [
-        { name: 'Rewrite', show: extension_settings[extensionName].showRewrite },
-        { name: 'Delete', show: extension_settings[extensionName].showDelete }
+        { name: 'Rewrite', show: settings.showRewrite },
+        { name: 'Delete', show: settings.showDelete }
     ];
     options.forEach(option => {
         if (option.show) {
@@ -273,6 +278,10 @@ function positionMenu() {
     if (!deleteMenu) return;
 
     let selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        removeDeleteMenu();
+        return;
+    }
     let range = selection.getRangeAt(0);
     let rect = range.getBoundingClientRect();
 
@@ -369,20 +378,15 @@ function createTextMapping(rawText, formattedHtml) {
             mapping.push([rawIndex, formattedIndex]);
             rawIndex++;
             formattedIndex++;
-        } else if (rawText.substr(rawIndex, 3) === '...' && formattedText[formattedIndex] === '…') {
-            // Handle ellipsis
-            mapping.push([rawIndex, formattedIndex]);
-            mapping.push([rawIndex + 1, formattedIndex]);
-            mapping.push([rawIndex + 2, formattedIndex]);
-            rawIndex += 3;
-            formattedIndex++;
-        } else if (formattedText[formattedIndex] === ' ' || formattedText[formattedIndex] === '\n') {
-            // Skip extra whitespace in formatted text
-            formattedIndex++;
-        } else {
-            // Skip characters in raw text that don't appear in formatted text
-            rawIndex++;
+            continue;
         }
+
+        if (formattedText[formattedIndex] === ' ' || formattedText[formattedIndex] === '\n') {
+            formattedIndex++;
+            continue;
+        }
+
+        rawIndex++;
     }
 
     return {
@@ -401,10 +405,9 @@ function createTextMapping(rawText, formattedHtml) {
                 }
             }
 
-            // If we didn't find an exact match, return the closest one
-            if (low > 0) low--;
+            if (low > 0) low -= 1;
             return mapping[low][0] + (formattedOffset - mapping[low][1]);
-        }
+        },
     };
 }
 
