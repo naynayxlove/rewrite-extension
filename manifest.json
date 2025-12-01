@@ -1,11 +1,11 @@
 {
-    "display_name": "Rewrite Extension",
+    "display_name": "Delete Extension",
     "loading_order": 39,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "SplitClover",
-    "version": "1.3.0",
+    "author": "Chocochocococo (fork from splitclover)",
+    "version": "2.1.0",
     "homePage": ""
 }
