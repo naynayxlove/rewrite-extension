@@ -190,10 +190,21 @@ async function getRewriteTextFromPopup() {
 async function handleDeleteSelection(mesId, swipeId, range) {
     const mesDiv = document.querySelector(`[mesid="${mesId}"] .mes_text`);
     // Use the passed-in range to get selection info
-    const { fullMessage, selectedRawText, rawStartOffset, rawEndOffset } = getSelectedTextInfo(mesId, mesDiv, range);
+    let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
 
     // Create the new message with the deleted section removed
-    const newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+    let newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+
+    // Fallback: if nothing changed, try direct substring removal from the raw message
+    if (newMessage === fullMessage) {
+        const fallbackText = selectedRawText || selectionText || '';
+        const directIndex = fallbackText ? fullMessage.indexOf(fallbackText) : -1;
+        if (directIndex !== -1) {
+            rawStartOffset = directIndex;
+            rawEndOffset = directIndex + fallbackText.length;
+            newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+        }
+    }
 
     // Save the change to the history (this also calls updateUndoButtons)
     saveLastChange(mesId, swipeId, fullMessage, newMessage);
@@ -215,10 +226,21 @@ async function handleDeleteSelection(mesId, swipeId, range) {
 async function handleRewriteSelection(mesId, swipeId, range, newText) {
     const mesDiv = document.querySelector(`[mesid="${mesId}"] .mes_text`);
     // Use the passed-in range to get selection info
-    const { fullMessage, selectedRawText, rawStartOffset, rawEndOffset } = getSelectedTextInfo(mesId, mesDiv, range);
+    let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
 
     // Create the new message with the rewritten section
-    const newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
+    let newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
+
+    // Fallback: if nothing changed, try direct substring replacement in the raw message
+    if (newMessage === fullMessage) {
+        const fallbackText = selectedRawText || selectionText || '';
+        const directIndex = fallbackText ? fullMessage.indexOf(fallbackText) : -1;
+        if (directIndex !== -1) {
+            rawStartOffset = directIndex;
+            rawEndOffset = directIndex + fallbackText.length;
+            newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
+        }
+    }
 
     // Save the change to the history (this also calls updateUndoButtons)
     saveLastChange(mesId, swipeId, fullMessage, newMessage);
@@ -445,6 +467,7 @@ function getTextOffset(parent, node) {
 function getSelectedTextInfo(mesId, mesDiv, range) {
     // Get the full message content
     const fullMessage = getContext().chat[mesId].mes;
+    const selectionText = range.toString();
 
     // Get the formatted message
     const formattedMessage = messageFormatting(fullMessage, undefined, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
@@ -493,7 +516,8 @@ function getSelectedTextInfo(mesId, mesDiv, range) {
         selectedRawText,
         rawStartOffset,
         rawEndOffset,
-        range
+        range,
+        selectionText,
     };
 }
 
