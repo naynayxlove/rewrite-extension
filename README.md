@@ -1,44 +1,21 @@
-# Rewrite Extension for SillyTavern
+# 前言
+此擴充是基於Splitclover的Rewrite擴充修改而成。
+Rewrite Extension: https://github.com/splitclover/rewrite-extension
 
-> [!IMPORTANT]
-> **2025.09.02** - This is extension is no longer maintained for the foreseeable future.
+# 功能
+1. 選取聊天室文字後，顯示Delete與Rewrite按鈕，可刪除或改寫選取文字。
+2. 可透過擴充介面選擇是否顯示Delete或Rewrite按鈕。
+3. 可透過聊天室快速編輯選單的Undo按鈕還原編輯。
+  
+※只會保留所有訊息的最後15筆操作，且換聊天室會清空操作記錄。
 
-## Overview
-
-The Rewrite Extension enhances the chat experience in SillyTavern by allowing users to dynamically rewrite, shorten, or expand selected text within messages. Works for chat completion, text completion and NovelAI.
+# English
+This extension is a fork of Splitclover's Rewrite Extension.  
+Original: https://github.com/splitclover/rewrite-extension
 
 ## Features
+1. Select text in a chat message to show Delete and Rewrite buttons; you can delete or replace the selection.
+2. Use the extension settings to toggle the Delete/Rewrite buttons.
+3. Use the Undo button in the quick edit menu to revert edits.
 
-- Custom {{rewrite}} macro that contains the selected text
-- Custom {{targetmessage}} macro that contains the full targeted message
-- Custom {{rewritecount}} macro that returns a numeric (39) count of words selected
-- Rewrite, shorten, or expand selected text in chat messages, with an added delete button
-- Convenient undo button
-- Real-time streaming of rewritten text
-- Temporary highlighting of modified text for easy identification
-- Ability to abort ongoing rewrites
-
-## Installation
-
-Use SillyTavern's built-in extension installer:
-`https://github.com/splitclover/rewrite-extension`
-
-## Usage
-
-To use the Rewrite Extension:
-
-1. Configure the extension (see below)
-2. Select text within a single(!) chat message
-3. A context menu will appear with options to Rewrite, Shorten, or Expand
-4. Choose the desired option
-5. The selected text will be replaced with the AI-generated modification
-
-## Configuration
-
-1. Open the Extension tab -> Rewrite Extension
-2. Set presets for Rewrite, Shorten, and Expand operations
-3. Adjust the highlight duration for modified text
-
-## Contributing
-
-Contributions to improve the Rewrite Extension are welcome. Please fork the repository and submit a pull request with your changes.
+Note: Only the latest 15 edits across all messages are kept, and the history clears when you switch chats.
