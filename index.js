@@ -1,3 +1,7 @@
+// 筆記：目前錯誤
+// 出現錯誤（false）直接取消操作，不要用false取代選取文字
+// 套用Regex的聊天室內容沒辦法準確Delete與Rewrite文字，刪除與取代的文字會位移（取代的位移尤其嚴重）
+
 import {
     eventSource,
     event_types,
