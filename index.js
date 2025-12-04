@@ -193,6 +193,13 @@ async function handleDeleteSelection(mesId, swipeId, range) {
     // Use the passed-in range to get selection info
     let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
 
+    const resolved = resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText);
+    if (!resolved) {
+        return;
+    }
+    rawStartOffset = resolved.start;
+    rawEndOffset = resolved.end;
+
     // Create the new message with the deleted section removed
     let newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
 
@@ -228,6 +235,13 @@ async function handleRewriteSelection(mesId, swipeId, range, newText) {
     const mesDiv = document.querySelector(`[mesid="${mesId}"] .mes_text`);
     // Use the passed-in range to get selection info
     let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
+
+    const resolved = resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText);
+    if (!resolved) {
+        return;
+    }
+    rawStartOffset = resolved.start;
+    rawEndOffset = resolved.end;
 
     // Create the new message with the rewritten section
     let newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
@@ -560,6 +574,25 @@ function getSelectedTextInfo(mesId, mesDiv, range) {
         range,
         selectionText,
     };
+}
+
+function resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText) {
+    const mappedLen = Math.max(0, rawEndOffset - rawStartOffset);
+    const trimmedSel = (selectionText || '').trim();
+    const trimmedRaw = (selectedRawText || '').trim();
+
+    const isMappedSane = mappedLen > 0 && rawStartOffset >= 0 && rawEndOffset <= fullMessage.length;
+    if (isMappedSane) {
+        return { start: rawStartOffset, end: rawEndOffset };
+    }
+
+    const loose = findLooseMatchInRaw(fullMessage, trimmedSel || trimmedRaw);
+    if (loose) {
+        return loose;
+    }
+
+    // Give up if we cannot resolve safely
+    return null;
 }
 
 function saveLastChange(mesId, swipeId, originalContent, newContent) {
