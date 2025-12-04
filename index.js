@@ -1,7 +1,3 @@
-// 筆記：目前錯誤
-// 出現錯誤（false）直接取消操作，不要用false取代選取文字
-// 套用Regex的聊天室內容沒辦法準確Delete與Rewrite文字，刪除與取代的文字會位移（取代的位移尤其嚴重）
-
 import {
     eventSource,
     event_types,
@@ -166,7 +162,8 @@ async function handleMenuItemClick(e) {
                 } else if (option === 'Rewrite') {
                     // Get the new text from user input
                     const newText = await getRewriteTextFromPopup();
-                    if (newText !== null && newText !== undefined) {
+                    // Treat explicit false as cancel to avoid inserting "false"
+                    if (newText !== null && newText !== undefined && newText !== false) {
                         await handleRewriteSelection(mesId, swipeId, initialRange, newText);
                     }
                 }
