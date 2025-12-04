@@ -1,5 +1,5 @@
 # 前言
-此擴充是基於Splitclover的Rewrite擴充修改而成。
+此擴充是基於Splitclover的Rewrite擴充修改而成。  
 Rewrite Extension: https://github.com/splitclover/rewrite-extension
 
 # 功能
