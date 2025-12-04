@@ -51,4 +51,22 @@
     line-height: 1.5;
 }
 
+/* Fix popup buttons text orientation/size in callPopup dialogs */
+.swal2-actions .swal2-styled {
+    writing-mode: horizontal-tb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    padding: 6px 12px;
+    min-width: 70px;
+}
 
+/* Increase specificity to beat global overrides in ST themes */
+.swal2-popup .swal2-actions .swal2-styled {
+    writing-mode: horizontal-tb !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+}
