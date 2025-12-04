@@ -412,26 +412,46 @@ function createTextMapping(rawText, formattedHtml) {
     let rawIndex = 0;
     let formattedIndex = 0;
 
+    const isWs = (ch) => ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\u00A0';
+
     while (rawIndex < rawText.length && formattedIndex < formattedText.length) {
-        if (rawText[rawIndex] === formattedText[formattedIndex]) {
+        const r = rawText[rawIndex];
+        const f = formattedText[formattedIndex];
+
+        if (r === f) {
             mapping.push([rawIndex, formattedIndex]);
             rawIndex++;
             formattedIndex++;
             continue;
         }
 
-        if (formattedText[formattedIndex] === ' ' || formattedText[formattedIndex] === '\n') {
+        if (isWs(r) && isWs(f)) {
+            mapping.push([rawIndex, formattedIndex]);
+            rawIndex++;
             formattedIndex++;
             continue;
         }
 
+        if (isWs(r)) {
+            mapping.push([rawIndex, formattedIndex]);
+            rawIndex++;
+            continue;
+        }
+
+        if (isWs(f)) {
+            mapping.push([rawIndex, formattedIndex]);
+            formattedIndex++;
+            continue;
+        }
+
+        // Fallback: advance raw to try to realign
         rawIndex++;
     }
 
     return {
         formattedToRaw: (formattedOffset) => {
             if (mapping.length === 0) {
-                return formattedOffset;
+                return Math.min(formattedOffset, rawText.length);
             }
 
             let low = 0;
@@ -448,13 +468,17 @@ function createTextMapping(rawText, formattedHtml) {
                 }
             }
 
+            let refIndex;
             if (low >= mapping.length) {
-                low = mapping.length - 1;
+                refIndex = mapping.length - 1;
             } else if (low > 0) {
-                low -= 1;
+                refIndex = low - 1;
+            } else {
+                refIndex = 0;
             }
 
-            return mapping[low][0] + (formattedOffset - mapping[low][1]);
+            const delta = formattedOffset - mapping[refIndex][1];
+            return Math.min(rawText.length, mapping[refIndex][0] + delta);
         },
     };
 }
