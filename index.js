@@ -396,7 +396,7 @@ async function handleMenuItemClick(e) {
                     await handleDeleteSelection(mesId, swipeId, initialRange);
                 } else if (option === 'Custom') {
                     const customInstructions = await getCustomInstructionsFromPopup();
-                    if (customInstructions !== null && customInstructions.trim() !== '') { // Proceed only if user entered text and didn't cancel
+                    if (typeof customInstructions === 'string' && customInstructions.trim() !== '') { // Proceed only if user entered text and didn't cancel
                         // Get selectionInfo *after* await and *before* handleRewrite
                         // Pass the initially captured range
                         const selectionInfo = getSelectedTextInfo(mesId, mesTextElement, initialRange);
@@ -404,7 +404,7 @@ async function handleMenuItemClick(e) {
                              console.error("[Rewrite Extension] Failed to get selectionInfo for Custom rewrite!");
                              return; // Prevent calling with undefined
                         }
-                        await handleRewrite(mesId, swipeId, option, customInstructions, selectionInfo); // Use the locally scoped selectionInfo
+                        await handleRewrite(mesId, swipeId, option, customInstructions.trim(), selectionInfo); // Use trimmed instructions
                     } else {
                         // User cancelled or entered empty instructions
                     }
@@ -1348,6 +1348,9 @@ function calculateTargetTokenCount(selectedText, option) {
                 case 'Expand':
                     modifier = extension_settings[extensionName].expandTokensAdd;
                     break;
+                case 'Custom':
+                    modifier = extension_settings[extensionName].customTokensAdd;
+                    break;
             }
             result = baseTokenCount + modifier;
         } else { // multiplicative
@@ -1362,6 +1365,9 @@ function calculateTargetTokenCount(selectedText, option) {
                 case 'Expand':
                     multiplier = extension_settings[extensionName].expandTokensMult;
                     break;
+                case 'Custom':
+                    multiplier = extension_settings[extensionName].customTokensMult;
+                    break;
             }
             result = baseTokenCount * multiplier;
         }
@@ -1375,6 +1381,9 @@ function calculateTargetTokenCount(selectedText, option) {
                 break;
             case 'Expand':
                 result = extension_settings[extensionName].expandTokens;
+                break;
+            case 'Custom':
+                result = extension_settings[extensionName].customTokens;
                 break;
         }
     }
