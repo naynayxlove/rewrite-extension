@@ -1,265 +1,73 @@
-import { sendOpenAIRequest, oai_settings } from "../../../openai.js";
-import { extractAllWords } from "../../../utils.js";
-import { getTokenCount } from "../../../tokenizers.js";
-import { getNovelGenerationData, generateNovelWithStreaming, nai_settings } from "../../../nai-settings.js";
-import { generateHorde, MIN_LENGTH } from "../../../horde.js";
-import { getTextGenGenerationData, generateTextGenWithStreaming } from "../../../textgen-settings.js";
 import {
-    main_api,
-    novelai_settings,
-    novelai_setting_names,
     eventSource,
     event_types,
-    saveSettingsDebounced,
     messageFormatting,
     addCopyToCodeBlocks,
-    getRequestHeaders,
-    generateRaw,
 } from "../../../../script.js";
 import { extension_settings, getContext } from "../../../extensions.js";
-import { getRegexedString, regex_placement } from '../../regex/engine.js'; // Import from built-in regex extension
 
-const extensionName = "rewrite-extension";
+const extensionName = "rewrite-extension-del-only";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 const undo_steps = 15;
 
 // Default settings
 const defaultSettings = {
-    rewritePreset: "",
-    shortenPreset: "",
-    expandPreset: "",
-    customPreset: "", 
-    highlightDuration: 3000,
-    selectedModel: "chat_completion",
-    textRewritePrompt: `[INST]Rewrite this section of text: """{{rewrite}}""" while keeping the same content, general style and length. Do not list alternatives and only print the result without prefix or suffix.[/INST]
-
-Sure, here is only the rewritten text without any comments: `,
-    textShortenPrompt: `[INST]Rewrite this section of text: """{{rewrite}}""" while keeping the same content, general style. Do not list alternatives and only print the result without prefix or suffix. Shorten it by roughly 20%.[/INST]
-
-Sure, here is only the rewritten text without any comments: `,
-    textExpandPrompt: `[INST]Rewrite this section of text: """{{rewrite}}""" while keeping the same content, general style. Do not list alternatives and only print the result without prefix or suffix. Lengthen it by roughly 20%.[/INST]
-
-Sure, here is only the rewritten text without any comments: `,
-    textCustomPrompt: `[INST]Rewrite this section of text: """{{rewrite}}""" according to the following instructions: "{{custom_instructions}}". Keep the general style. Do not list alternatives and only print the result without prefix or suffix.[/INST]
-
-Sure, here is only the rewritten text without any comments: `, 
-    useStreaming: true,
-    useDynamicTokens: true,
-    dynamicTokenMode: 'multiplicative',
-    rewriteTokens: 100,
-    shortenTokens: 50,
-    expandTokens: 150,
-    customTokens: 100, 
-    rewriteTokensAdd: 0,
-    shortenTokensAdd: -50,
-    expandTokensAdd: 50,
-    customTokensAdd: 0, 
-    rewriteTokensMult: 1.05,
-    shortenTokensMult: 0.8,
-    expandTokensMult: 1.5,
-    customTokensMult: 1.0, 
-    removePrefix: `"`,
-    removeSuffix: `"`,
-    overrideMaxTokens: true,
-    showRewrite: true,
-    showShorten: true,
-    showExpand: true,
-    showCustom: true, 
     showDelete: true,
-    applyRegexOnRewrite: true, // New setting to control regex application
+    showRewrite: true,
 };
 
-let rewriteMenu = null;
+let deleteMenu = null;
 let lastSelection = null;
-let abortController;
 
 let changeHistory = [];
 
+function ensureSettings() {
+    const existing = extension_settings[extensionName] || {};
+    extension_settings[extensionName] = { ...defaultSettings, ...existing };
+    return extension_settings[extensionName];
+}
+
 // Load settings
 function loadSettings() {
-    extension_settings[extensionName] = extension_settings[extensionName] || {};
+    const settings = ensureSettings();
 
     // Helper function to get a setting with a default value
     const getSetting = (key, defaultValue) => {
-        return extension_settings[extensionName][key] !== undefined
-            ? extension_settings[extensionName][key]
-            : defaultValue;
+        return settings[key] !== undefined ? settings[key] : defaultValue;
     };
 
     // Load settings, using defaults if not set
-    $("#rewrite_preset").val(getSetting('rewritePreset', defaultSettings.rewritePreset));
-    $("#shorten_preset").val(getSetting('shortenPreset', defaultSettings.shortenPreset));
-    $("#expand_preset").val(getSetting('expandPreset', defaultSettings.expandPreset));
-    $("#custom_preset").val(getSetting('customPreset', defaultSettings.customPreset)); 
-    $("#highlight_duration").val(getSetting('highlightDuration', defaultSettings.highlightDuration));
-    $("#rewrite_extension_model_select").val(getSetting('selectedModel', defaultSettings.selectedModel));
-    $("#text_rewrite_prompt").val(getSetting('textRewritePrompt', defaultSettings.textRewritePrompt));
-    $("#text_shorten_prompt").val(getSetting('textShortenPrompt', defaultSettings.textShortenPrompt));
-    $("#text_expand_prompt").val(getSetting('textExpandPrompt', defaultSettings.textExpandPrompt));
-    $("#text_custom_prompt").val(getSetting('textCustomPrompt', defaultSettings.textCustomPrompt)); 
-    $("#use_streaming").prop('checked', getSetting('useStreaming', defaultSettings.useStreaming));
-    $("#use_dynamic_tokens").prop('checked', getSetting('useDynamicTokens', defaultSettings.useDynamicTokens));
-    $("#dynamic_token_mode").val(getSetting('dynamicTokenMode', defaultSettings.dynamicTokenMode));
-    $("#rewrite_tokens").val(getSetting('rewriteTokens', defaultSettings.rewriteTokens));
-    $("#shorten_tokens").val(getSetting('shortenTokens', defaultSettings.shortenTokens));
-    $("#expand_tokens").val(getSetting('expandTokens', defaultSettings.expandTokens));
-    $("#custom_tokens").val(getSetting('customTokens', defaultSettings.customTokens)); 
-    $("#rewrite_tokens_add").val(getSetting('rewriteTokensAdd', defaultSettings.rewriteTokensAdd));
-    $("#shorten_tokens_add").val(getSetting('shortenTokensAdd', defaultSettings.shortenTokensAdd));
-    $("#expand_tokens_add").val(getSetting('expandTokensAdd', defaultSettings.expandTokensAdd));
-    $("#custom_tokens_add").val(getSetting('customTokensAdd', defaultSettings.customTokensAdd)); 
-    $("#rewrite_tokens_mult").val(getSetting('rewriteTokensMult', defaultSettings.rewriteTokensMult));
-    $("#shorten_tokens_mult").val(getSetting('shortenTokensMult', defaultSettings.shortenTokensMult));
-    $("#expand_tokens_mult").val(getSetting('expandTokensMult', defaultSettings.expandTokensMult));
-    $("#custom_tokens_mult").val(getSetting('customTokensMult', defaultSettings.customTokensMult)); 
-    $("#remove_prefix").val(getSetting('removePrefix', defaultSettings.removePrefix));
-    $("#remove_suffix").val(getSetting('removeSuffix', defaultSettings.removeSuffix));
-    $("#override_max_tokens").prop('checked', getSetting('overrideMaxTokens', defaultSettings.overrideMaxTokens));
-    $("#show_rewrite").prop('checked', getSetting('showRewrite', defaultSettings.showRewrite));
-    $("#show_shorten").prop('checked', getSetting('showShorten', defaultSettings.showShorten));
-    $("#show_expand").prop('checked', getSetting('showExpand', defaultSettings.showExpand));
-    $("#show_custom").prop('checked', getSetting('showCustom', defaultSettings.showCustom)); 
     $("#show_delete").prop('checked', getSetting('showDelete', defaultSettings.showDelete));
-    $("#apply_regex_on_rewrite").prop('checked', getSetting('applyRegexOnRewrite', defaultSettings.applyRegexOnRewrite)); // Load new setting
-
-    // Update the UI based on loaded settings
-    updateModelSettings();
-    updateTokenSettings();
+    $("#show_rewrite").prop('checked', getSetting('showRewrite', defaultSettings.showRewrite));
 }
 
 function saveSettings() {
     extension_settings[extensionName] = {
-        rewritePreset: $("#rewrite_preset").val(),
-        shortenPreset: $("#shorten_preset").val(),
-        expandPreset: $("#expand_preset").val(),
-        customPreset: $("#custom_preset").val(), 
-        highlightDuration: parseInt($("#highlight_duration").val()),
-        selectedModel: $("#rewrite_extension_model_select").val(),
-        textRewritePrompt: $("#text_rewrite_prompt").val(),
-        textShortenPrompt: $("#text_shorten_prompt").val(),
-        textExpandPrompt: $("#text_expand_prompt").val(),
-        textCustomPrompt: $("#text_custom_prompt").val(), 
-        useStreaming: $("#use_streaming").is(':checked'),
-        useDynamicTokens: $("#use_dynamic_tokens").is(':checked'),
-        dynamicTokenMode: $("#dynamic_token_mode").val(),
-        rewriteTokens: parseInt($("#rewrite_tokens").val()),
-        shortenTokens: parseInt($("#shorten_tokens").val()),
-        expandTokens: parseInt($("#expand_tokens").val()),
-        customTokens: parseInt($("#custom_tokens").val()), 
-        rewriteTokensAdd: parseInt($("#rewrite_tokens_add").val()),
-        shortenTokensAdd: parseInt($("#shorten_tokens_add").val()),
-        expandTokensAdd: parseInt($("#expand_tokens_add").val()),
-        customTokensAdd: parseInt($("#custom_tokens_add").val()), 
-        rewriteTokensMult: parseFloat($("#rewrite_tokens_mult").val()),
-        shortenTokensMult: parseFloat($("#shorten_tokens_mult").val()),
-        expandTokensMult: parseFloat($("#expand_tokens_mult").val()),
-        customTokensMult: parseFloat($("#custom_tokens_mult").val()), 
-        removePrefix: $("#remove_prefix").val(),
-        removeSuffix: $("#remove_suffix").val(),
-        overrideMaxTokens: $("#override_max_tokens").is(':checked'),
-        showRewrite: $("#show_rewrite").is(':checked'),
-        showShorten: $("#show_shorten").is(':checked'),
-        showExpand: $("#show_expand").is(':checked'),
-        showCustom: $("#show_custom").is(':checked'), 
+        ...defaultSettings,
         showDelete: $("#show_delete").is(':checked'),
-        applyRegexOnRewrite: $("#apply_regex_on_rewrite").is(':checked'), // Save new setting
+        showRewrite: $("#show_rewrite").is(':checked'),
     };
 
-    // Ensure all settings have a value, using defaults if necessary
-    for (const [key, value] of Object.entries(defaultSettings)) {
-        if (extension_settings[extensionName][key] === undefined) {
-            extension_settings[extensionName][key] = value;
-        }
-    }
-
-    saveSettingsDebounced();
-}
-
-// Populate dropdowns
-async function populateDropdowns() {
-    const result = await fetch('/api/settings/get', {
-        method: 'POST',
-        headers: getContext().getRequestHeaders(),
-        body: JSON.stringify({}),
-    });
-
-    if (result.ok) {
-        const data = await result.json();
-        const presets = data.openai_setting_names;
-        const dropdowns = ['rewrite_preset', 'shorten_preset', 'expand_preset', 'custom_preset']; // Added custom_preset
-        dropdowns.forEach(dropdown => {
-            const select = $(`#${dropdown}`);
-            select.empty();
-            presets.forEach(preset => {
-                select.append($('<option>', {
-                    value: preset,
-                    text: preset
-                }));
-            });
-        });
-
-        // Set the selected values after populating
-        loadSettings();
-    }
-}
-
-function updateModelSettings() {
-    const modelSelect = document.getElementById('rewrite_extension_model_select');
-    const chatCompletionSettings = document.getElementById('chat_completion_settings');
-    const textBasedSettings = document.getElementById('text_based_settings');
-
-    if (modelSelect.value === 'chat_completion') {
-        chatCompletionSettings.style.display = 'block';
-        textBasedSettings.style.display = 'none';
-    } else {
-        chatCompletionSettings.style.display = 'none';
-        textBasedSettings.style.display = 'block';
-    }
-}
-
-function updateTokenSettings() {
-    const useDynamicTokens = $("#use_dynamic_tokens").is(':checked');
-    const dynamicTokenMode = $("#dynamic_token_mode").val();
-    $("#static_token_settings").toggle(!useDynamicTokens);
-    $("#dynamic_token_settings").toggle(useDynamicTokens);
-    $("#additive_settings").toggle(dynamicTokenMode === 'additive');
-    $("#multiplicative_settings").toggle(dynamicTokenMode === 'multiplicative');
+    ensureSettings();
 }
 
 // Initialize
 jQuery(async () => {
-    const settingsHtml = await $.get(`${extensionFolderPath}/rewrite_settings.html`);
-    $("#extensions_settings2").append(settingsHtml);
+    try {
+        const settingsHtml = await $.get(`${extensionFolderPath}/delete_settings.html`);
+        $("#extensions_settings2").append(settingsHtml);
+    } catch (error) {
+        console.error("[Delete Extension] Failed to load settings UI:", error);
+    }
 
-    // Populate dropdowns
-    await populateDropdowns();
+    ensureSettings();
 
     // Add event listeners
-    $(".rewrite-extension-settings select, #highlight_duration, #text_rewrite_prompt, #text_shorten_prompt, #text_expand_prompt, #text_custom_prompt").on("change", saveSettings); // Added #text_custom_prompt
-    $("#use_streaming").on("change", saveSettings);
-    $("#use_dynamic_tokens, #dynamic_token_mode").on("change", () => {
-        updateTokenSettings();
-        saveSettings();
-    });
-    $("#rewrite_tokens, #shorten_tokens, #expand_tokens, #custom_tokens, #rewrite_tokens_add, #shorten_tokens_add, #expand_tokens_add, #custom_tokens_add, #rewrite_tokens_mult, #shorten_tokens_mult, #expand_tokens_mult, #custom_tokens_mult").on("input", saveSettings); // Added custom token inputs
-    $("#remove_prefix, #remove_suffix").on("change", saveSettings);
-    $("#override_max_tokens").on("change", saveSettings);
-    $("#show_rewrite, #show_shorten, #show_expand, #show_custom, #show_delete").on("change", saveSettings); // Added #show_custom
-    $("#apply_regex_on_rewrite").on("change", saveSettings); // Add listener for new checkbox
-
-    $("#rewrite_extension_model_select").on("change", () => {
-        updateModelSettings();
-        saveSettings();
-    });
+    $("#show_delete, #show_rewrite").on("change", saveSettings);
 
     // Load settings
     loadSettings();
-
-    // Add event listener for SETTINGS_UPDATED
-    eventSource.on(event_types.SETTINGS_UPDATED, () => {
-        populateDropdowns();
-    });
 
     eventSource.on(event_types.CHAT_CHANGED, () => {
         changeHistory = [];
@@ -270,47 +78,20 @@ jQuery(async () => {
         removeUndoButton(editedMesId);
     });
 
-    updateModelSettings();
+    // Initialize the delete menu functionality after settings are loaded
+    initDeleteMenu();
 });
 
-// Initialize the rewrite menu functionality
-initRewriteMenu();
-
-function initRewriteMenu() {
-    // document.addEventListener('mouseup', handleSelectionEnd);
-    // document.addEventListener('touchend', handleSelectionEnd);
+function initDeleteMenu() {
     document.addEventListener('selectionchange', handleSelectionChange);
     document.addEventListener('mousedown', hideMenuOnOutsideClick);
     document.addEventListener('touchstart', hideMenuOnOutsideClick);
 
     let chatContainer = document.getElementById('chat');
-    chatContainer.addEventListener('scroll', positionMenu);
-
-    $('#mes_stop').on('click', handleStopRewrite);
-}
-
-
-function handleStopRewrite() {
-    if (abortController) {
-        const { mesDiv, mesId, swipeId, highlightDuration } = abortController.signal;
-        abortController.abort();
-        // Restore the original settings
-        if (abortController.signal.prev_oai_settings) {
-            Object.assign(oai_settings, abortController.signal.prev_oai_settings);
-        }
-
-        getContext().activateSendButtons();
-
-        // Call removeHighlight with the stored arguments
-        setTimeout(() => removeHighlight(mesDiv, mesId, swipeId), highlightDuration);
+    if (chatContainer) {
+        chatContainer.addEventListener('scroll', positionMenu);
     }
 }
-
-// function handleSelectionEnd(e) {
-//     if (e.target && e.target.closest('.ctx-menu')) return;
-//     removeRewriteMenu();
-//     setTimeout(processSelection, 50);
-// }
 
 function handleSelectionChange() {
     // Use a small timeout to ensure the selection has been updated
@@ -327,7 +108,7 @@ function processSelection() {
     let selectedText = selection.toString().trim();
 
     // Always remove the existing menu first
-    removeRewriteMenu();
+    removeDeleteMenu();
 
     if (selectedText.length > 0) {
         let range = selection.getRangeAt(0);
@@ -343,27 +124,11 @@ function processSelection() {
 
         // Check if both start and end are within the same mes_text element
         if (startMesText && endMesText && startMesText === endMesText) {
-            createRewriteMenu();
+            createDeleteMenu();
         }
     }
 
     lastSelection = selectedText.length > 0 ? selectedText : null;
-}
-
-async function getCustomInstructionsFromPopup() {
-    const { callPopup } = getContext();
-    try {
-        const instructions = await callPopup('Enter custom rewrite instructions:', 'input');
-
-        // Introduce a zero-delay setTimeout to yield to the event loop
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        return instructions;
-    } catch (error) {
-        console.error("[Rewrite Extension] Error during custom instruction popup:", error);
-        return null;
-    } finally {
-    }
 }
 
 async function handleMenuItemClick(e) {
@@ -375,7 +140,7 @@ async function handleMenuItemClick(e) {
 
     // Ensure there's a selection and a range
     if (!selection || selection.rangeCount === 0) {
-        removeRewriteMenu();
+        removeDeleteMenu();
         return;
     }
 
@@ -394,6 +159,13 @@ async function handleMenuItemClick(e) {
                 if (option === 'Delete') {
                     // Pass the initially captured range to handleDeleteSelection
                     await handleDeleteSelection(mesId, swipeId, initialRange);
+                } else if (option === 'Rewrite') {
+                    // Get the new text from user input
+                    const newText = await getRewriteTextFromPopup();
+                    // Treat explicit false as cancel to avoid inserting "false"
+                    if (newText !== null && newText !== undefined && newText !== false) {
+                        await handleRewriteSelection(mesId, swipeId, initialRange, newText);
+                    }
                 } else if (option === 'Custom') {
                     const customInstructions = await getCustomInstructionsFromPopup();
                     if (typeof customInstructions === 'string' && customInstructions.trim() !== '') { // Proceed only if user entered text and didn't cancel
@@ -405,35 +177,97 @@ async function handleMenuItemClick(e) {
                              return; // Prevent calling with undefined
                         }
                         await handleRewrite(mesId, swipeId, option, customInstructions.trim(), selectionInfo); // Use trimmed instructions
-                    } else {
-                        // User cancelled or entered empty instructions
                     }
-                } else {
-                    // For other rewrite options, get selectionInfo right before the call
-                    // Pass the initially captured range
-                    const selectionInfo = getSelectedTextInfo(mesId, mesTextElement, initialRange); // Get selectionInfo here
-                    if (!selectionInfo) {
-                         console.error(`[Rewrite Extension] Failed to get selectionInfo for ${option} rewrite!`);
-                         return; // Prevent calling with undefined
-                    }
-                    await handleRewrite(mesId, swipeId, option, null, selectionInfo); // Use the locally scoped selectionInfo
                 }
             }
         }
     }
 
-    removeRewriteMenu();
+    removeDeleteMenu();
     window.getSelection().removeAllRanges();
 }
 
-// Modify signature to accept the captured range
+async function getRewriteTextFromPopup() {
+    const { callPopup } = getContext();
+    try {
+        const newText = await callPopup('Enter new text to replace selection:', 'input');
+        // Introduce a zero-delay setTimeout to yield to the event loop
+        await new Promise(resolve => setTimeout(resolve, 0));
+        return newText;
+    } catch (error) {
+        console.error("[Delete Extension] Error during rewrite text popup:", error);
+        return null;
+    }
+}
+
 async function handleDeleteSelection(mesId, swipeId, range) {
     const mesDiv = document.querySelector(`[mesid="${mesId}"] .mes_text`);
     // Use the passed-in range to get selection info
-    const { fullMessage, selectedRawText, rawStartOffset, rawEndOffset } = getSelectedTextInfo(mesId, mesDiv, range);
+    let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
+
+    const resolved = resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText);
+    if (!resolved) {
+        return;
+    }
+    rawStartOffset = resolved.start;
+    rawEndOffset = resolved.end;
 
     // Create the new message with the deleted section removed
-    const newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+    let newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+
+    // Fallback: if nothing changed, try a loose regex-based match against the raw message
+    if (newMessage === fullMessage) {
+        const fallbackText = selectedRawText || selectionText || '';
+        const looseMatch = findLooseMatchInRaw(fullMessage, fallbackText);
+        if (looseMatch) {
+            rawStartOffset = looseMatch.start;
+            rawEndOffset = looseMatch.end;
+            newMessage = fullMessage.slice(0, rawStartOffset) + fullMessage.slice(rawEndOffset);
+        }
+    }
+
+    // Save the change to the history (this also calls updateUndoButtons)
+    saveLastChange(mesId, swipeId, fullMessage, newMessage);
+
+    // Update the message in the chat context
+    getContext().chat[mesId].mes = newMessage;
+    if (swipeId !== undefined && getContext().chat[mesId].swipes) {
+        getContext().chat[mesId].swipes[swipeId] = newMessage;
+    }
+
+    // Update the UI
+    mesDiv.innerHTML = messageFormatting(newMessage, getContext().name2, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
+    addCopyToCodeBlocks(mesDiv);
+
+    // Save the chat
+    await getContext().saveChat();
+}
+
+async function handleRewriteSelection(mesId, swipeId, range, newText) {
+    const mesDiv = document.querySelector(`[mesid="${mesId}"] .mes_text`);
+    // Use the passed-in range to get selection info
+    let { fullMessage, selectedRawText, rawStartOffset, rawEndOffset, selectionText } = getSelectedTextInfo(mesId, mesDiv, range);
+
+    const resolved = resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText);
+    if (!resolved) {
+        return;
+    }
+    rawStartOffset = resolved.start;
+    rawEndOffset = resolved.end;
+
+    // Create the new message with the rewritten section
+    let newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
+
+    // Fallback: if nothing changed, try a loose regex-based match against the raw message
+    if (newMessage === fullMessage) {
+        const fallbackText = selectedRawText || selectionText || '';
+        const looseMatch = findLooseMatchInRaw(fullMessage, fallbackText);
+        if (looseMatch) {
+            rawStartOffset = looseMatch.start;
+            rawEndOffset = looseMatch.end;
+            newMessage = fullMessage.slice(0, rawStartOffset) + newText + fullMessage.slice(rawEndOffset);
+        }
+    }
 
     // Save the change to the history (this also calls updateUndoButtons)
     saveLastChange(mesId, swipeId, fullMessage, newMessage);
@@ -453,26 +287,25 @@ async function handleDeleteSelection(mesId, swipeId, range) {
 }
 
 function hideMenuOnOutsideClick(e) {
-    if (rewriteMenu && !rewriteMenu.contains(e.target)) {
-        removeRewriteMenu();
+    if (deleteMenu && !deleteMenu.contains(e.target)) {
+        removeDeleteMenu();
     }
 }
 
-function createRewriteMenu() {
-    removeRewriteMenu();
+function createDeleteMenu() {
+    removeDeleteMenu();
 
-    rewriteMenu = document.createElement('ul');
-    rewriteMenu.className = 'list-group ctx-menu';
-    rewriteMenu.style.position = 'absolute';
-    rewriteMenu.style.zIndex = '1000';
-    rewriteMenu.style.position = 'fixed';
+    deleteMenu = document.createElement('ul');
+    deleteMenu.className = 'list-group ctx-menu';
+    deleteMenu.style.position = 'absolute';
+    deleteMenu.style.zIndex = '1000';
+    deleteMenu.style.position = 'fixed';
+
+    const settings = ensureSettings();
 
     const options = [
-        { name: 'Rewrite', show: extension_settings[extensionName].showRewrite },
-        { name: 'Shorten', show: extension_settings[extensionName].showShorten },
-        { name: 'Expand', show: extension_settings[extensionName].showExpand },
-        { name: 'Custom', show: extension_settings[extensionName].showCustom }, 
-        { name: 'Delete', show: extension_settings[extensionName].showDelete }
+        { name: 'Rewrite', show: settings.showRewrite },
+        { name: 'Delete', show: settings.showDelete }
     ];
     options.forEach(option => {
         if (option.show) {
@@ -482,18 +315,22 @@ function createRewriteMenu() {
             li.addEventListener('mousedown', handleMenuItemClick);
             li.addEventListener('touchstart', handleMenuItemClick);
             li.dataset.option = option.name;
-            rewriteMenu.appendChild(li);
+            deleteMenu.appendChild(li);
         }
     });
 
-    document.body.appendChild(rewriteMenu);
+    document.body.appendChild(deleteMenu);
     positionMenu();
 }
 
 function positionMenu() {
-    if (!rewriteMenu) return;
+    if (!deleteMenu) return;
 
     let selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        removeDeleteMenu();
+        return;
+    }
     let range = selection.getRangeAt(0);
     let rect = range.getBoundingClientRect();
 
@@ -506,8 +343,8 @@ function positionMenu() {
     let viewportHeight = window.innerHeight;
 
     // Get the menu's dimensions
-    let menuWidth = rewriteMenu.offsetWidth;
-    let menuHeight = rewriteMenu.offsetHeight;
+    let menuWidth = deleteMenu.offsetWidth;
+    let menuHeight = deleteMenu.offsetHeight;
 
     // Adjust the position if the menu overflows the viewport
     if (left + menuWidth > viewportWidth) {
@@ -517,14 +354,14 @@ function positionMenu() {
         top = rect.top + window.pageYOffset - menuHeight - 5;
     }
 
-    rewriteMenu.style.left = `${left}px`;
-    rewriteMenu.style.top = `${top}px`;
+    deleteMenu.style.left = `${left}px`;
+    deleteMenu.style.top = `${top}px`;
 }
 
-function removeRewriteMenu() {
-    if (rewriteMenu) {
-        rewriteMenu.remove();
-        rewriteMenu = null;
+function removeDeleteMenu() {
+    if (deleteMenu) {
+        deleteMenu.remove();
+        deleteMenu = null;
     }
 }
 
@@ -534,8 +371,8 @@ function addUndoButton(mesId) {
         const mesButtons = messageDiv.querySelector('.mes_buttons');
         if (mesButtons) {
             const undoButton = document.createElement('div');
-            undoButton.className = 'mes_button mes_undo_rewrite fa-solid fa-undo interactable';
-            undoButton.title = 'Undo rewrite';
+            undoButton.className = 'mes_button mes_undo_delete fa-solid fa-undo interactable';
+            undoButton.title = 'Undo delete';
             undoButton.dataset.mesId = mesId;
             undoButton.addEventListener('click', handleUndo);
 
@@ -556,49 +393,6 @@ function removeUndoButton(editedMesId) {
     updateUndoButtons();
 }
 
-async function removeHighlight(mesDiv, mesId, swipeId) {
-    const highlightSpan = mesDiv.querySelector('.animated-highlight');
-    if (highlightSpan) {
-        const textNode = document.createTextNode(highlightSpan.textContent);
-        highlightSpan.parentNode.replaceChild(textNode, highlightSpan);
-    }
-
-    const context = getContext();
-    const messageData = context.chat[mesId];
-
-    if (messageData) {
-        let messageContent;
-        if (swipeId !== undefined && messageData.swipes && messageData.swipes[swipeId]) {
-            messageContent = messageData.swipes[swipeId];
-        } else {
-            messageContent = messageData.mes;
-        }
-
-        // Format the message into HTML
-        const formattedMessage = messageFormatting(
-            messageContent,
-            context.name2,
-            messageData.isSystem,
-            messageData.isUser,
-            mesId
-        );
-
-        // Create a temporary div to hold the formatted message
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = formattedMessage;
-
-        // Apply addCopyToCodeBlocks to the temporary div
-        addCopyToCodeBlocks(tempDiv);
-
-        // Find the mes_text element within the message div
-        const mesTextElement = mesDiv.closest('.mes').querySelector('.mes_text');
-        if (mesTextElement) {
-            // Replace the content of mes_text with the new formatted content
-            mesTextElement.innerHTML = tempDiv.innerHTML;
-        }
-    }
-}
-
 function findClosestMesText(element) {
     while (element && element.nodeType !== 1) {
         element = element.parentElement;
@@ -614,10 +408,26 @@ function findClosestMesText(element) {
 
 function findMessageDiv(element) {
     while (element) {
-        if (element.hasAttribute('mesid') && element.hasAttribute('swipeid')) {
+        if (element.hasAttribute('mesid')) {
             return element;
         }
         element = element.parentElement;
+    }
+    return null;
+}
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findLooseMatchInRaw(rawText, selectionText) {
+    if (!selectionText) return null;
+    const pattern = escapeRegex(selectionText.trim()).replace(/\s+/g, '\\s+');
+    if (!pattern) return null;
+    const re = new RegExp(pattern, 'm');
+    const match = rawText.match(re);
+    if (match) {
+        return { start: match.index, end: match.index + match[0].length };
     }
     return null;
 }
@@ -628,29 +438,48 @@ function createTextMapping(rawText, formattedHtml) {
     let rawIndex = 0;
     let formattedIndex = 0;
 
+    const isWs = (ch) => ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\u00A0';
+
     while (rawIndex < rawText.length && formattedIndex < formattedText.length) {
-        if (rawText[rawIndex] === formattedText[formattedIndex]) {
+        const r = rawText[rawIndex];
+        const f = formattedText[formattedIndex];
+
+        if (r === f) {
             mapping.push([rawIndex, formattedIndex]);
             rawIndex++;
             formattedIndex++;
-        } else if (rawText.substr(rawIndex, 3) === '...' && formattedText[formattedIndex] === '…') {
-            // Handle ellipsis
-            mapping.push([rawIndex, formattedIndex]);
-            mapping.push([rawIndex + 1, formattedIndex]);
-            mapping.push([rawIndex + 2, formattedIndex]);
-            rawIndex += 3;
-            formattedIndex++;
-        } else if (formattedText[formattedIndex] === ' ' || formattedText[formattedIndex] === '\n') {
-            // Skip extra whitespace in formatted text
-            formattedIndex++;
-        } else {
-            // Skip characters in raw text that don't appear in formatted text
-            rawIndex++;
+            continue;
         }
+
+        if (isWs(r) && isWs(f)) {
+            mapping.push([rawIndex, formattedIndex]);
+            rawIndex++;
+            formattedIndex++;
+            continue;
+        }
+
+        if (isWs(r)) {
+            mapping.push([rawIndex, formattedIndex]);
+            rawIndex++;
+            continue;
+        }
+
+        if (isWs(f)) {
+            mapping.push([rawIndex, formattedIndex]);
+            formattedIndex++;
+            continue;
+        }
+
+        // Fallback: advance raw to try to realign
+        rawIndex++;
     }
 
     return {
         formattedToRaw: (formattedOffset) => {
+            if (mapping.length === 0) {
+                return Math.min(formattedOffset, rawText.length);
+            }
+
             let low = 0;
             let high = mapping.length - 1;
 
@@ -665,10 +494,18 @@ function createTextMapping(rawText, formattedHtml) {
                 }
             }
 
-            // If we didn't find an exact match, return the closest one
-            if (low > 0) low--;
-            return mapping[low][0] + (formattedOffset - mapping[low][1]);
-        }
+            let refIndex;
+            if (low >= mapping.length) {
+                refIndex = mapping.length - 1;
+            } else if (low > 0) {
+                refIndex = low - 1;
+            } else {
+                refIndex = 0;
+            }
+
+            const delta = formattedOffset - mapping[refIndex][1];
+            return Math.min(rawText.length, mapping[refIndex][0] + delta);
+        },
     };
 }
 
@@ -694,16 +531,13 @@ function getTextOffset(parent, node) {
     return offset;
 }
 
-// Modify signature to accept the captured range
 function getSelectedTextInfo(mesId, mesDiv, range) {
-    // Removed: const selection = window.getSelection();
-    // Removed: const range = selection.getRangeAt(0); - Use the passed-in range directly
-
     // Get the full message content
     const fullMessage = getContext().chat[mesId].mes;
+    const selectionText = range.toString();
 
-    // Get the formatted message
-    const formattedMessage = messageFormatting(fullMessage, undefined, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
+    // Get the formatted message text currently shown in the DOM (fallback to formatter)
+    const formattedMessage = mesDiv ? mesDiv.textContent : messageFormatting(fullMessage, undefined, getContext().chat[mesId].isSystem, getContext().chat[mesId].isUser, mesId);
 
     // Create a mapping between raw and formatted text
     const mapping = createTextMapping(fullMessage, formattedMessage);
@@ -740,7 +574,6 @@ function getSelectedTextInfo(mesId, mesDiv, range) {
             rawEndOffset += 2;
         }
     }
-    // Note: This doesn't handle ***bold italics*** or nested cases perfectly, but covers common scenarios.
 
     // Get the selected raw text using potentially adjusted offsets
     const selectedRawText = fullMessage.substring(rawStartOffset, rawEndOffset);
@@ -750,8 +583,28 @@ function getSelectedTextInfo(mesId, mesDiv, range) {
         selectedRawText,
         rawStartOffset,
         rawEndOffset,
-        range
+        range,
+        selectionText,
     };
+}
+
+function resolveOffsets(fullMessage, rawStartOffset, rawEndOffset, selectedRawText, selectionText) {
+    const mappedLen = Math.max(0, rawEndOffset - rawStartOffset);
+    const trimmedSel = (selectionText || '').trim();
+    const trimmedRaw = (selectedRawText || '').trim();
+
+    const isMappedSane = mappedLen > 0 && rawStartOffset >= 0 && rawEndOffset <= fullMessage.length;
+    if (isMappedSane) {
+        return { start: rawStartOffset, end: rawEndOffset };
+    }
+
+    const loose = findLooseMatchInRaw(fullMessage, trimmedSel || trimmedRaw);
+    if (loose) {
+        return loose;
+    }
+
+    // Give up if we cannot resolve safely
+    return null;
 }
 
 function saveLastChange(mesId, swipeId, originalContent, newContent) {
@@ -773,7 +626,7 @@ function saveLastChange(mesId, swipeId, originalContent, newContent) {
 
 function updateUndoButtons() {
     // Remove all existing undo buttons
-    document.querySelectorAll('.mes_undo_rewrite').forEach(button => button.remove());
+    document.querySelectorAll('.mes_undo_delete').forEach(button => button.remove());
 
     // Add undo buttons for all messages with changes
     const changedMessageIds = [...new Set(changeHistory.map(change => change.mesId))];
@@ -1434,48 +1287,4 @@ async function handleUndo(event) {
         // Update undo buttons
         updateUndoButtons();
     }
-}
-
-async function saveRewrittenText(mesId, swipeId, fullMessage, startOffset, endOffset, newText) {
-    const context = getContext();
-
-    // Get the prefix and suffix to remove from the settings
-    const removePrefix = extension_settings[extensionName].removePrefix || '';
-    const removeSuffix = extension_settings[extensionName].removeSuffix || '';
-
-    // Remove prefix if present
-    if (removePrefix && newText.startsWith(removePrefix)) {
-        newText = newText.slice(removePrefix.length);
-    }
-
-    // Remove suffix if present
-    if (removeSuffix && newText.endsWith(removeSuffix)) {
-        newText = newText.slice(0, -removeSuffix.length);
-    }
-
-    // Apply AI Output regex scripts if setting is enabled
-    let processedText = newText; // Default to original newText
-    if (extension_settings[extensionName].applyRegexOnRewrite) {
-        processedText = getRegexedString(newText, regex_placement.AI_OUTPUT);
-    }
-
-    // Create the new message with the rewritten and potentially processed section
-    const newMessage =
-        fullMessage.substring(0, startOffset) +
-        processedText + // Use the processed text here
-        fullMessage.substring(endOffset);
-
-    // Save the change to the history
-    saveLastChange(mesId, swipeId, fullMessage, newMessage);
-
-    // Update the main message
-    context.chat[mesId].mes = newMessage;
-
-    // Update the swipe if it exists
-    if (swipeId !== undefined && context.chat[mesId].swipes && context.chat[mesId].swipes[swipeId]) {
-        context.chat[mesId].swipes[swipeId] = newMessage;
-    }
-
-    // Save and reload the chat
-    await context.saveChat();
 }

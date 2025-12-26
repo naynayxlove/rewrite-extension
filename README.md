@@ -1,44 +1,38 @@
-# Rewrite Extension for SillyTavern
+# Delete & Rewrite Extension
 
-> [!IMPORTANT]
-> **2025.09.02** - This is extension is no longer maintained for the foreseeable future.
-
-## Overview
-
-The Rewrite Extension enhances the chat experience in SillyTavern by allowing users to dynamically rewrite, shorten, or expand selected text within messages. Works for chat completion, text completion and NovelAI.
+A powerful utility for SillyTavern that allows you to surgically edit chat messages by selecting text. This extension is a fork of Splitclover's Rewrite Extension, enhanced with deletion capabilities and improved selection handling.
 
 ## Features
 
-- Custom {{rewrite}} macro that contains the selected text
-- Custom {{targetmessage}} macro that contains the full targeted message
-- Custom {{rewritecount}} macro that returns a numeric (39) count of words selected
-- Rewrite, shorten, or expand selected text in chat messages, with an added delete button
-- Convenient undo button
-- Real-time streaming of rewritten text
-- Temporary highlighting of modified text for easy identification
-- Ability to abort ongoing rewrites
+### 1. Selection-Based Actions
+When you select text within a chat message, a context menu appears with the following options:
+- **Delete**: Instantly removes the selected text from the message.
+- **Rewrite**: Opens a popup allowing you to manually enter new text to replace the selection.
+- **Custom (LLM Powered)**: (If configured) Allows you to provide instructions to an LLM to rewrite the selected portion of the message.
+
+### 2. Intelligent Mapping
+The extension uses a sophisticated text mapping system to ensure that when you select formatted text (Markdown/HTML), the changes are applied correctly to the underlying raw message content. It even includes heuristics to automatically include surrounding Markdown syntax (like bold `**` or italics `*`) if your selection abuts them.
+
+### 3. Undo System
+- Every action is tracked in a local history.
+- An **Undo** button (counter-clockwise arrow icon) appears in the message button area after an edit.
+- Supports up to **15 undo steps** across the current chat session.
+- *Note: History is cleared when switching chats.*
+
+### 4. Customizable UI
+Toggle buttons on or off via the Extension Settings panel:
+- **Show Rewrite Button**: Enable/Disable the manual rewrite option.
+- **Show Delete Button**: Enable/Disable the quick delete option.
 
 ## Installation
 
-Use SillyTavern's built-in extension installer:
-`https://github.com/splitclover/rewrite-extension`
+1. Clone or download this repository into your SillyTavern `extensions` folder.
+2. The extension will automatically load on the next start or when you refresh the UI.
 
-## Usage
+## Requirements
+- Works best with the latest version of SillyTavern.
+- For "Custom" rewrite features, an active LLM API connection (OpenAI, NovelAI, KoboldCpp, etc.) is required.
 
-To use the Rewrite Extension:
-
-1. Configure the extension (see below)
-2. Select text within a single(!) chat message
-3. A context menu will appear with options to Rewrite, Shorten, or Expand
-4. Choose the desired option
-5. The selected text will be replaced with the AI-generated modification
-
-## Configuration
-
-1. Open the Extension tab -> Rewrite Extension
-2. Set presets for Rewrite, Shorten, and Expand operations
-3. Adjust the highlight duration for modified text
-
-## Contributing
-
-Contributions to improve the Rewrite Extension are welcome. Please fork the repository and submit a pull request with your changes.
+---
+*Original Extension by [splitclover](https://github.com/splitclover/rewrite-extension)*  
+*Enhanced and Forked by Revivalist-Dev*
